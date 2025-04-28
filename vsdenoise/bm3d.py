@@ -16,7 +16,12 @@ from vstools import (
     vs_object, check_progressive
 )
 
-from .types import _Plugin_bm3dcpu_Core_Bound, _Plugin_bm3dcuda_Core_Bound, _Plugin_bm3dcuda_rtc_Core_Bound
+from .types import (
+    _Plugin_bm3dcpu_Core_Bound,
+    _Plugin_bm3dcuda_Core_Bound,
+    _Plugin_bm3dcuda_rtc_Core_Bound,
+    _Plugin_bm3dhip_Core_Bound
+)
 
 __all__ = [
     'Profile',
@@ -25,7 +30,7 @@ __all__ = [
 
     'BM3DMawen',
 
-    'BM3DCuda', 'BM3DCudaRTC', 'BM3DCPU'
+    'BM3DCuda', 'BM3DCudaRTC', 'BM3DCPU', 'BM3DHip'
 ]
 
 
@@ -500,7 +505,7 @@ class AbstractBM3DCudaMeta(ABCMeta):
 class AbstractBM3DCuda(AbstractBM3D, metaclass=AbstractBM3DCudaMeta):
     """BM3D implementation by WolframRhodium."""
 
-    plugin: _Plugin_bm3dcuda_Core_Bound | _Plugin_bm3dcuda_rtc_Core_Bound | _Plugin_bm3dcpu_Core_Bound
+    plugin: _Plugin_bm3dcuda_Core_Bound | _Plugin_bm3dcuda_rtc_Core_Bound | _Plugin_bm3dcpu_Core_Bound | _Plugin_bm3dhip_Core_Bound
 
     def basic(self, clip: vs.VideoNode | None = None, opp: bool = False) -> vs.VideoNode:
         clip = self.cspconfig.get_clip(self.cspconfig.clip, self._pre_clip, clip)
@@ -557,22 +562,38 @@ class BM3DCudaRTC(AbstractBM3DCuda, plugin=core.lazy.bm3dcuda_rtc):
 class BM3DCPU(AbstractBM3DCuda, plugin=core.lazy.bm3dcpu):
     ...
 
+class BM3DHip(AbstractBM3DCuda, plugin=core.lazy.bm3dhip):
+    ...
+
 
 class BM3D(AbstractBM3D):
     def __new__(cls, *args: Any, **kwargs: Any) -> AbstractBM3D:  # type: ignore
+        from warnings import warn
+
         new_cls: type[AbstractBM3D] | None = None
         gpu_available = is_gpu_available()
 
-        if gpu_available and hasattr(core, 'bm3dcuda_rtc'):
+        if gpu_available and hasattr(core, "bm3dcuda_rtc"):
             new_cls = BM3DCudaRTC
-        elif gpu_available and hasattr(core, 'bm3dcuda'):
+        elif gpu_available and hasattr(core, "bm3dcuda"):
             new_cls = BM3DCuda
-        elif hasattr(core, 'bm3dcpu'):
+        elif gpu_available and hasattr(core, "bm3dhip"):
+            new_cls = BM3DHip
+        elif hasattr(core, "bm3dcpu"):
             new_cls = BM3DCPU
-        elif hasattr(core, 'bm3d'):
+        elif hasattr(core, "bm3d"):
             new_cls = BM3DMawen
 
+        if gpu_available and new_cls is BM3DCPU or new_cls is BM3DMawen:
+            warn("A usable GPU was detected, but no GPU-accelerated BM3D plugin was found. Falling back to CPU.")
+
+        if not gpu_available:
+            if hasattr(core, "bm3dcuda_rtc") or hasattr(core, "bm3dcuda"):
+                warn("You have bm3dcuda installed, but no usable GPU. Ensure you have the CUDA SDK installed.")
+            if hasattr(core, "bm3dhip"):
+                warn("You have bm3dhip installed, but no usable GPU. Ensure you have the ROCm SDK installed.")
+
         if new_cls is None:
-            raise CustomRuntimeError('You have no bm3d plugin installed!')
+            raise CustomRuntimeError("You have no usable bm3d plugin installed!")
 
         return new_cls(*args, **kwargs)

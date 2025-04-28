@@ -60,11 +60,11 @@ def is_gpu_available() -> bool:
             return True
 
     try:
-        rocm_smi = run(['rocm-smi'], capture_output=True, text=True)
+        hipinfo = run(['hipinfo'], capture_output=True, text=True)
     except FileNotFoundError:
         pass
     else:
-        if rocm_smi.returncode == 0:
+        if hipinfo.returncode == 0:
             return True
 
     return False
